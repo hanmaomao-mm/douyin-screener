@@ -1,0 +1,23 @@
+# 抖音美瞳达人筛选工作流 —— 依赖
+# 安装：pip install -r requirements.txt
+
+# --- 基础 ---
+PyYAML>=6.0
+requests>=2.31
+numpy>=1.26
+
+# --- 图像 / 截图 ---
+opencv-python>=4.8          # 人脸检测(YuNet)、清晰度计算、图像处理
+Pillow>=10.0
+mss>=9.0.1                  # 高速屏幕截图
+
+# --- 桌面交互 ---
+pyautogui>=0.9.54           # 鼠标键盘模拟（拟人化节奏）
+PySide6-Essentials>=6.5     # 可视化控制台（Qt Widgets）
+
+# --- OCR（中文文字识别）---
+rapidocr>=3.0               # 本地离线 OCR，按区域裁剪识别
+onnxruntime>=1.20           # rapidocr 的推理后端
+
+# --- 输出 ---
+openpyxl>=3.1               # 写 Excel

@@ -1,0 +1,161 @@
+# ============================================================
+#  抖音美瞳达人筛选工作流 —— 主配置
+#  修改本文件后【无需重启】，工作流会在下一轮循环自动读取最新值。
+# ============================================================
+
+# ---------- 1. 窗口定位 ----------
+window:
+  title_keywords: ["抖音", "Douyin"]   # 窗口标题包含任一关键词即视为候选
+  process_name: "douyin.exe"           # 进程名（辅助定位，留空则只按标题找）
+  keep_foreground: true                # 每轮确保窗口在前台（截屏/滚轮需要）
+  restore_if_minimized: false          # 最小化时：true=自动还原；false=弹窗提醒你（默认，更安全）
+  auto_restore_hidden: true            # 客户端缩在系统托盘时，自动把窗口调出来（不抢焦点）
+  launch_if_not_running: true          # 检测不到客户端进程时，自动启动抖音（路径见下）
+  executable: ""                       # douyin.exe 完整路径；留空 = 自动查找（桌面快捷方式 / 常见安装路径）
+  auto_switch_feed: true               # 启动后自动点击「推荐」进入推荐页（确保刷的是推荐流）
+  feed_tab: "推荐"                     # 要点击的频道文字；也可以写 ["推荐", "精选"] 依次尝试
+
+# ---------- 2. 拟人化节奏（防风控核心） ----------
+rhythm:
+  scroll_method: "key"                 # key=方向键↓切换（实测有效）/ wheel=滚轮 / auto=按键为主
+  dwell_seconds: [2, 5]                # 每看完一条视频，随机停顿时长（秒）
+  scroll_steps: [2, 6]                 # 每次下滑的滚轮档数（随机区间）
+  scroll_segments: [1, 3]              # 一次下滑拆成几小段（更像人手）
+  micro_pause: [0.15, 0.7]             # 每个动作之间的微停顿（秒）
+  rest_every: [8, 15]                  # 每 N 条休息一次（每次随机取值）
+  rest_seconds: [30, 90]               # 单次休息时长（秒）
+  mouse_jitter: true                   # 滚动前轻微随机移动鼠标
+  scroll_settle: [1.2, 2.5]            # 滚动后等待视频加载稳定的时长（秒）
+
+# ---------- 3. AI 视觉识别（默认：DeepSeek） ----------
+vision:
+  enabled: true
+  provider: "deepseek"                 # deepseek / dashscope / custom
+  base_url: "https://api.deepseek.com" # 任何 OpenAI 兼容端点
+  api_key: ""                          # <<< 填你的 Key，或设置环境变量 VISION_API_KEY
+  model: "deepseek-flash"              # DeepSeek 视觉模型（V4.1-Flash，支持图片输入）
+  thinking: false                      # DeepSeek 思考模式默认开启，这里关掉（快且省 token）
+  json_mode: true                      # 要求模型只返回 JSON
+  timeout: 90
+  max_tokens: 900
+  temperature: 0.1
+  retries: 2
+  frames_per_video: 2                  # 每条视频抽几帧送模型（抽帧间隔见 capture 段）
+
+  # 本地预筛：先用 OpenCV 过一遍，不合格的直接跳过、不花 API 钱
+  prefilter:
+    enabled: true
+    strict: false                      # false=宽松（推荐）：本地只拦模糊画面，人脸判断交给AI；true=严格省钱但容易误杀
+    min_face_px: 140                   # strict=true 时生效：人脸框最小边长（像素）
+    min_eye_sharpness: 45              # 眼部区域清晰度（拉普拉斯方差）下限
+    min_face_ratio: 0.02               # strict=true 时生效：人脸占画面面积比例下限
+    max_face_ratio: 0.98               # 人脸占比过高（贴脸/无背景）也提醒一下
+    face_model: "models/face_detection_yunet_2023mar.onnx"   # YuNet 人脸检测模型
+    auto_download_model: true          # 模型缺失时尝试自动下载
+
+  # API 不可用时的降级方案（纯本地启发式，只能判断"眼睛看不清"，判断不了"颜值"）
+  fallback_local: true
+
+# ---------- 4. 抽帧 ----------
+capture:
+  sample_interval: [0.8, 1.4]          # 同一视频内二次抽帧的间隔（秒）
+  save_frame_on_hit: true              # 命中的视频存档截图，方便你回看
+  save_frame_dir: "data/frames"
+  jpeg_quality: 88
+  max_width: 1280                      # 送模型前等比缩到该宽度，省 token
+
+# ---------- 5. 文字识别（OCR）----------
+ocr:
+  engine: "auto"                       # auto | rapidocr | vision | none
+  # 相对窗口的裁剪区域 [left, top, right, bottom]，取值 0~1；full 用全画面
+  # 【按真实客户端校准】识别不准时运行 tools/tune_regions.py 重新调
+  regions:
+    full: [0.0, 0.0, 1.0, 1.0]
+    caption: [0.08, 0.70, 0.90, 0.925]  # 视频文案 / 话题标签 / 昵称（左下信息区）
+    rail: [0.93, 0.30, 1.0, 0.85]       # 右侧互动数据栏（点赞/评论/收藏/分享，最右窄条）
+    profile: [0.08, 0.70, 0.65, 0.83]   # 昵称行（@xxx · 几天前）
+    comments: [0.05, 0.04, 0.97, 0.55]  # 评论浮层（展开时覆盖画面上部）
+  min_confidence: 0.55                 # OCR 置信度下限
+  upscale: 1.8                         # 默认放大倍数（未单独指定的区域用这个）
+  # 按区域单独设放大倍数：小字区域放大收益大，全画面放大纯浪费时间
+  upscale_by_region:
+    full: 1.0
+    caption: 2.0
+    rail: 2.2
+    profile: 2.0
+    comments: 1.3
+  search_term_prefixes: ["看后搜", "大家都在搜", "大家在搜", "搜一搜", "搜索", "找同款", "看后搜同款"]
+  search_term_heuristics: true         # 无前缀时，是否把 caption 区的短文本行当作"看后搜"推测值
+
+# ---------- 6. 关键词库 ----------
+keywords:
+  file: "keywords.txt"                 # 关键词库文件（热更新，随改随生效）。关键词写在这个 txt 里，一行一个
+  match_scope: ["search_terms", "hashtags"]   # 匹配范围：看后搜词条 / 话题标签
+  match_mode: "contains"               # contains=包含即命中 / exact=完全相等
+  case_sensitive: false
+  fuzzy: true                          # 是否容忍 OCR 少量错字（编辑距离 1 以内）
+
+# ---------- 7. 刷量号过滤 ----------
+filter:
+  # --- 点赞率规则 ---
+  like_rate_enabled: true
+  like_rate_threshold: 0.02            # 点赞率阈值 = 点赞 / 播放。低于该值 → 刷量号
+  play_count_mode: "auto"              # auto=画面读到播放量才用 / manual=统一用下面的基准值 / off=不用该规则
+  manual_play_count: 0                 # play_count_mode=manual 时的固定播放量基准
+
+  # --- 点赞绝对量规则 ---
+  like_floor_enabled: true
+  like_floor: 50                       # 播放/曝光明显但点赞低于该值 → 刷量嫌疑
+  like_floor_min_play: 10000           # 至少达到这个播放量才触发上面的规则
+
+  # --- 评论水军规则 ---
+  comment_spam:
+    enabled: true
+    repeat_ratio: 0.4                  # 重复评论占比超过该值 → 水军
+    min_comments: 6                    # 至少识别到几条评论才开始判定
+    spam_phrase_hit: 3                 # 命中话术库的评论条数达到该值 → 水军
+    phrases_file: "spam_phrases.txt"
+
+  record_spam_to_excel: false          # 刷量号是否也写进 Excel（false=刷量号直接跳过不记录）
+  record_rejected_to_excel: false      # 不达标的普通视频是否也写入 Excel（false=不记录）
+
+# ---------- 8. 自动点赞开关 ----------
+#  !! 默认关闭。开启后有抖音风控 / 限流 / 封号风险，风险由使用者自行承担 !!
+auto_like:
+  enabled: false
+  method: "template"                   # template=模板匹配（准） / coord=相对坐标（简单）
+  template_dir: "templates"            # 放 like_normal.png / like_active.png
+  template_threshold: 0.86
+  relative_xy: [0.918, 0.472]          # coord 模式：点赞按钮中心相对窗口的位置
+  delay_after_like: [3, 6]             # 点赞后随机等待（秒）再下滑
+  max_likes_per_run: 30                # 单次运行最多点赞数（防失控）
+  like_cooldown: [8, 20]               # 两次点赞之间的最小随机间隔（秒）
+
+# ---------- 9. 等级判定 ----------
+grade:
+  high_match_score: 75                 # 综合分 >= 75 → 高匹配
+  normal_score: 45                     # 综合分 >= 45 → 普通；低于则丢弃（不写表）
+  weights:                             # 综合分权重（会自动归一化）
+    vision: 0.50                       # AI 视觉：是否适合美瞳种草
+    keyword: 0.35                      # 关键词命中
+    metrics: 0.15                      # 数据健康度
+
+# ---------- 10. 输出 ----------
+output:
+  excel_path: "data/达人筛选结果.xlsx"
+  sheet_name: "候选达人"
+  log_dir: "logs"
+  save_full_log: false                 # JSONL 全量日志：false=只记合格视频；true=连被过滤的一起记（排查用）
+  console_verbose: true                # 控制台逐条输出识别结果
+  excel_freeze_header: true
+  # 链接口径：桌面客户端推荐流拿不到真实 video id，
+  #   search = 生成抖音搜索链接（可点击，便于你按昵称定位到该达人）【默认】
+  #   empty  = 链接列留空，你人工补录
+  link_mode: "search"
+
+# ---------- 11. 安全 ----------
+safety:
+  dedup_memory: 400                    # 最近 N 条内不重复记录同一达人
+  same_frame_retry: 3                  # 连续 N 次画面没变就判定"滑动失效"，自动重试
+  popup_on_lost_window: true           # 窗口丢失/最小化时弹窗暂停
+  max_runtime_minutes: 0               # 0 = 不限时
